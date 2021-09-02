@@ -20,7 +20,7 @@ class SchedulerOpen : public SchedulerPinnedBase {
 		virtual bool threadSetAffinity(thread_id_t calling_thread_id, thread_id_t thread_id, size_t cpusetsize, const cpu_set_t *mask);
 		virtual core_id_t threadCreate(thread_id_t thread_id);
 		virtual void threadExit(thread_id_t thread_id, SubsecondTime time);
-
+		virtual void executeDVFSPolicy();
 		
 
 	private:
@@ -31,9 +31,6 @@ class SchedulerOpen : public SchedulerPinnedBase {
 		int getCoreNb(int y, int x);
 		bool isAssignedToTask(int coreId);
 		bool isAssignedToThread(int coreId);
-
-		// open scheduler specific wrapper over DVFS policy
-		void executeDVFSPolicy();
 
 		void migrateThread(thread_id_t thread_id, core_id_t core_id);
 
