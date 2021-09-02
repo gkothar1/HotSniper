@@ -104,7 +104,7 @@ To do your own (automated) evaluations, see the `simulationcontrol.resultlib` pa
 - [ ] set architectural parameters
   - `config/base.cfg` and other config files as specified in the previous step
 - [ ] set scheduling and DVFS parameters
-  - `config/base.cfg`: `scheduler/open/*` and `scheduler/open/dvfs/*`
+  - `config/base.cfg`: `scheduler/open/*` and `scheduler/dvfs/*`
 - [ ] set `perf_model/core/frequency`
 - [ ] start trial run to extract estimations from McPAT
   - start a simulation based on `simulationcontrol/run.py`: `test_static_power`, kill it after ~5ms simulated time

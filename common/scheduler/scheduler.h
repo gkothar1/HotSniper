@@ -4,13 +4,17 @@
 #include "fixed_types.h"
 #include "thread_manager.h"
 
+#include "dvfs.h"
+#include "performance_counters.h"
+#include "thermalModel.h"
+
 class Scheduler
 {
    public:
       static Scheduler* create(ThreadManager *thread_manager);
 
       Scheduler(ThreadManager *thread_manager);
-      virtual ~Scheduler() {}
+      virtual ~Scheduler() { if (m_dvfs) delete m_dvfs; }
 
       virtual core_id_t threadCreate(thread_id_t thread_id) = 0;
       virtual void threadYield(thread_id_t thread_id) {}
@@ -23,6 +27,14 @@ class Scheduler
       // Utility functions
       core_id_t findFirstFreeCore();
       void printMapping();
+
+      // Scheduler based DVFS
+      Dvfs *               m_dvfs;
+      int                  m_coreRows;
+      int                  m_coreColumns;
+      ThermalModel *       m_thermalModel;
+      PerformanceCounters *m_performanceCounters;
+      bool                 m_dvfs_enabled;
 };
 
 #endif // __SCHEDULER_H

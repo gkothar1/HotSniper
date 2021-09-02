@@ -8,9 +8,6 @@
 #define __SCHEDULER_OPEN_H
 
 #include "scheduler_pinned_base.h"
-#include "thermalModel.h"
-#include "performance_counters.h"
-#include "policies/dvfspolicy.h"
 #include "policies/mappingpolicy.h"
 
 
@@ -27,10 +24,6 @@ class SchedulerOpen : public SchedulerPinnedBase {
 		
 
 	private:
-		int coreRows;
-		int coreColumns;
-
-		PerformanceCounters *performanceCounters;
 		MappingPolicy *mappingPolicy = NULL;
 		long mappingEpoch;
 		void initMappingPolicy(String policyName);
@@ -39,21 +32,8 @@ class SchedulerOpen : public SchedulerPinnedBase {
 		bool isAssignedToTask(int coreId);
 		bool isAssignedToThread(int coreId);
 
-		DVFSPolicy *dvfsPolicy = NULL;
-		long dvfsEpoch;
-		void initDVFSPolicy(String policyName);
+		// open scheduler specific wrapper over DVFS policy
 		void executeDVFSPolicy();
-		const int maxDVFSPatience = 0;
-		std::vector<int> downscalingPatience; // can be used by the DVFS control loop to delay DVFS downscaling for very little violations
-		std::vector<int> upscalingPatience; // can be used by the DVFS control loop to delay DVFS upscaling for very little violations
-		bool delayDVFSTransition(int coreCounter, int oldFrequency, int newFrequency);
-		void DVFSTransitionDelayed(int coreCounter, int oldFrequency, int newFrequency);
-		void DVFSTransitionNotDelayed(int coreCounter);
-		void setFrequency(int coreCounter, int frequency);
-		ThermalModel *thermalModel;
-		int minFrequency;
-		int maxFrequency;
-		int frequencyStepSize;
 
 		void migrateThread(thread_id_t thread_id, core_id_t core_id);
 

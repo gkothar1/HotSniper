@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "scheduler.h"
 #include "scheduler_static.h"
 #include "scheduler_pinned.h"
@@ -32,8 +34,45 @@ Scheduler* Scheduler::create(ThreadManager *thread_manager)
 }
 
 Scheduler::Scheduler(ThreadManager *thread_manager)
-   : m_thread_manager(thread_manager)
+   : m_thread_manager(thread_manager), m_dvfs(NULL)
 {
+   if (!(Sim()->getCfg()->getString("scheduler/dvfs/logic") == "off"))
+   {
+      int numberOfCores =Sim()->getConfig()->getApplicationCores();
+
+      m_coreRows = (int)sqrt(numberOfCores);
+
+      while ((numberOfCores % m_coreRows) != 0) {
+         m_coreRows -= 1;
+      }
+
+      m_coreColumns = numberOfCores / m_coreRows;
+
+      if ((m_coreRows * m_coreColumns) != numberOfCores) {
+         cout<<"\n[Scheduler] [Error]: Invalid system size: " << numberOfCores << ", expected rectangular-shaped system." << endl;
+         exit (1);
+      }
+
+      m_performanceCounters = new PerformanceCounters(Sim()->getCfg()->getString("general/output_dir").c_str(),
+         "InstantaneousPower.log", "InstantaneousTemperature.log", "InstantaneousCPIStack.log");
+
+      m_thermalModel = new ThermalModel(m_coreRows, m_coreColumns,
+         Sim()->getCfg()->getString("periodic_thermal/thermal_model"),
+         Sim()->getCfg()->getFloat("periodic_thermal/ambient_temperature"),
+         Sim()->getCfg()->getFloat("periodic_thermal/max_temperature"),
+         Sim()->getCfg()->getFloat("periodic_thermal/inactive_power"),
+         Sim()->getCfg()->getFloat("periodic_thermal/tdp"));
+
+      m_dvfs = new Dvfs(m_coreRows, m_coreColumns,
+         (int)(1000 * Sim()->getCfg()->getFloat("scheduler/dvfs/min_frequency") + 0.5),
+         (int)(1000 * Sim()->getCfg()->getFloat("scheduler/dvfs/max_frequency") + 0.5),
+         (int)(1000 * Sim()->getCfg()->getFloat("scheduler/dvfs/frequency_step_size") + 0.5),
+         atol(Sim()->getCfg()->getString("scheduler/dvfs/dvfs_epoch").c_str()), 0,
+         m_performanceCounters,
+         Sim()->getCfg()->getString("scheduler/dvfs/logic").c_str(),
+         Sim()->getCfg()->getFloat("scheduler/dvfs/fixed_power/per_core_power_budget"),
+         m_thermalModel);
+   }
 }
 
 core_id_t Scheduler::findFirstFreeCore()

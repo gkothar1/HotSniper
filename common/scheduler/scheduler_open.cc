@@ -12,10 +12,6 @@
 #include "magic_server.h"
 #include "thread_manager.h"
 
-#include "policies/dvfsMaxFreq.h"
-#include "policies/dvfsFixedPower.h"
-#include "policies/dvfsTSP.h"
-#include "policies/dvfsTestStaticPower.h"
 #include "policies/mapFirstUnused.h"
 
 #include <iomanip>
@@ -131,25 +127,10 @@ SchedulerOpen::SchedulerOpen(ThreadManager *thread_manager)
    , m_interleaving(Sim()->getCfg()->getInt("scheduler/pinned/interleaving"))
    , m_next_core(0) {
 
-	// Initialize config constants
-	minFrequency = (int)(1000 * Sim()->getCfg()->getFloat("scheduler/open/dvfs/min_frequency") + 0.5);
-	maxFrequency = (int)(1000 * Sim()->getCfg()->getFloat("scheduler/open/dvfs/max_frequency") + 0.5);
-	frequencyStepSize = (int)(1000 * Sim()->getCfg()->getFloat("scheduler/open/dvfs/frequency_step_size") + 0.5);
-	dvfsEpoch = atol(Sim()->getCfg()->getString("scheduler/open/dvfs/dvfs_epoch").c_str());
-
 	m_core_mask.resize(Sim()->getConfig()->getApplicationCores());
 	for (core_id_t core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); core_id++) {
 	       m_core_mask[core_id] = Sim()->getCfg()->getBoolArray("scheduler/open/core_mask", core_id);
   	}
-
-	for (core_id_t core_id = 0; core_id < (core_id_t)Sim()->getConfig()->getApplicationCores(); core_id++) {
-		downscalingPatience.push_back(maxDVFSPatience);
-		upscalingPatience.push_back(maxDVFSPatience);
-	}
-
-
-	performanceCounters = new PerformanceCounters(Sim()->getCfg()->getString("general/output_dir").c_str(),
-		"InstantaneousPower.log", "InstantaneousTemperature.log", "InstantaneousCPIStack.log");
 
 	mappingEpoch = atol (Sim()->getCfg()->getString("scheduler/open/epoch").c_str());
 	queuePolicy = Sim()->getCfg()->getString("scheduler/open/queuePolicy").c_str();
@@ -159,24 +140,6 @@ SchedulerOpen::SchedulerOpen(ThreadManager *thread_manager)
 	numberOfTasks = Sim()->getCfg()->getInt("traceinput/num_apps");
 	numberOfCores = Sim()->getConfig()->getApplicationCores();
 	randomPriority = Sim()->getCfg() ->getBool("scheduler/open/randompriority");
-	
-
-	
-
-	coreRows = (int)sqrt(numberOfCores);
-	while ((numberOfCores % coreRows) != 0) {
-		coreRows -= 1;
-	}
-	coreColumns = numberOfCores / coreRows;
-	if (coreRows * coreColumns != numberOfCores) {
-		cout<<"\n[Scheduler] [Error]: Invalid system size: " << numberOfCores << ", expected rectangular-shaped system." << endl;
-		exit (1);
-	}
-	double ambientTemperature = Sim()->getCfg()->getFloat("periodic_thermal/ambient_temperature");
-    double maxTemperature = Sim()->getCfg()->getFloat("periodic_thermal/max_temperature");
-    double inactivePower = Sim()->getCfg()->getFloat("periodic_thermal/inactive_power");
-    double tdp = Sim()->getCfg()->getFloat("periodic_thermal/tdp");
-	thermalModel = new ThermalModel((unsigned int)coreRows, (unsigned int)coreColumns, Sim()->getCfg()->getString("periodic_thermal/thermal_model"), ambientTemperature, maxTemperature, inactivePower, tdp);
 
 	//Initialize the cores in the system.
 	for (int coreIterator=0; coreIterator < numberOfCores; coreIterator++) {
@@ -265,7 +228,6 @@ SchedulerOpen::SchedulerOpen(ThreadManager *thread_manager)
 	}
 	
 	initMappingPolicy(Sim()->getCfg()->getString("scheduler/open/logic").c_str());
-	initDVFSPolicy(Sim()->getCfg()->getString("scheduler/open/dvfs/logic").c_str());
 }
 
 /** initMappingPolicy
@@ -283,33 +245,10 @@ void SchedulerOpen::initMappingPolicy(String policyName) {
 				break;
 			}
 		}
-		mappingPolicy = new MapFirstUnused(coreRows, coreColumns, preferredCoresOrder);
+		mappingPolicy = new MapFirstUnused(m_coreRows, m_coreColumns, preferredCoresOrder);
 	} //else if (policyName ="XYZ") {... } //Place to instantiate a new mapping logic. Implementation is put in "policies" package.
 	else {
 		cout << "\n[Scheduler] [Error]: Unknown Mapping Algorithm" << endl;
- 		exit (1);
-	}
-}
-
-/** initDVFSPolicy
- * Initialize the DVFS policy to the policy with the given name
- */
-void SchedulerOpen::initDVFSPolicy(String policyName) {
-	cout << "[Scheduler] [Info]: Initializing DVFS policy" << endl;
-	if (policyName == "off") {
-		dvfsPolicy = NULL;
-	} else if (policyName == "maxFreq") {
-		dvfsPolicy = new DVFSMaxFreq(performanceCounters, coreRows, coreColumns, maxFrequency);
-	} else if (policyName == "testStaticPower") {
-		dvfsPolicy = new DVFSTestStaticPower(performanceCounters, coreRows, coreColumns, minFrequency, maxFrequency);
-	} else if (policyName == "fixedPower") {
-		float perCorePowerBudget = Sim()->getCfg()->getFloat("scheduler/open/dvfs/fixed_power/per_core_power_budget");
-		dvfsPolicy = new DVFSFixedPower(performanceCounters, coreRows, coreColumns, minFrequency, maxFrequency, frequencyStepSize, perCorePowerBudget);
-	} else if (policyName == "tsp") {
-		dvfsPolicy = new DVFSTSP(thermalModel, performanceCounters, coreRows, coreColumns, minFrequency, maxFrequency, frequencyStepSize);
-	} //else if (policyName ="XYZ") {... } //Place to instantiate a new DVFS logic. Implementation is put in "policies" package.
-	else {
-		cout << "\n[Scheduler] [Error]: Unknown DVFS Algorithm" << endl;
  		exit (1);
 	}
 }
@@ -576,11 +515,11 @@ void SchedulerOpen::migrateThread(thread_id_t thread_id, core_id_t core_id)
  * Return the number of the core at the given coordinates.
  */
 int SchedulerOpen::getCoreNb(int y, int x) {
-	if ((y < 0) || (y >= coreRows) || (x < 0) || (x >= coreColumns)) {
+	if ((y < 0) || (y >= m_coreRows) || (x < 0) || (x >= m_coreColumns)) {
 		cout << "[Scheduler][getCoreNb][Error]: Invalid core coordinates: " << y << ", " << x << endl;
 		exit (1);
 	}
-	return y * coreColumns + x;
+	return y * m_coreColumns + x;
 }
 
 /** isAssignedToTask
@@ -1108,63 +1047,6 @@ int coreRequirementTranslation (String compositionString) {
 	}
 }
 
-
-/**
- * Return whether the DVFS control loop should be patient and delay the DVFS scaling.
- */
-bool SchedulerOpen::delayDVFSTransition(int coreCounter, int oldFrequency, int newFrequency) {
-	return ((newFrequency == oldFrequency - frequencyStepSize) && (downscalingPatience.at(coreCounter) > 0))
-		 || ((newFrequency == oldFrequency + frequencyStepSize) && (upscalingPatience.at(coreCounter) > 0));
-}
-
-/**
- * Notify that a DVFS transition was delayed
- */
-void SchedulerOpen::DVFSTransitionDelayed(int coreCounter, int oldFrequency, int newFrequency) {
-	if (newFrequency == oldFrequency - frequencyStepSize) {
-		cout << "DVFS transition delayed (current patience: " << downscalingPatience.at(coreCounter) << ")" << endl;
-		downscalingPatience.at(coreCounter) -= 1;
-	} else if (newFrequency == oldFrequency + frequencyStepSize) {
-		cout << "DVFS transition delayed (current patience: " << upscalingPatience.at(coreCounter) << ")" << endl;
-		upscalingPatience.at(coreCounter) -= 1;
-	}
-}
-
-/**
- * Notify that a DVFS transition was not delayed
- */
-void SchedulerOpen::DVFSTransitionNotDelayed(int coreCounter) {
-	downscalingPatience.at(coreCounter) = maxDVFSPatience;
-	upscalingPatience.at(coreCounter) = maxDVFSPatience;
-}
-
-/**
- * Set the frequency for a core.
- */
-void SchedulerOpen::setFrequency(int coreCounter, int frequency) {
-	int oldFrequency = Sim()->getMagicServer()->getFrequency(coreCounter);
-
-	if (frequency > oldFrequency + 1000) {
-		frequency = oldFrequency + 1000;
-	}
-	if (frequency < minFrequency) {
-		frequency = minFrequency;
-	}
-	if (frequency > maxFrequency) {
-		frequency = maxFrequency;
-	}
-
-	if (delayDVFSTransition(coreCounter, oldFrequency, frequency)) {
-		DVFSTransitionDelayed(coreCounter, oldFrequency, frequency);
-	} else {
-		DVFSTransitionNotDelayed(coreCounter);
-		if (frequency != oldFrequency) {
-			Sim()->getMagicServer()->setFrequency(coreCounter, frequency);
-		}
-	}
-}
-
-
 /** executeDVFSPolicy
  * Set DVFS levels according to the used policy.
  */
@@ -1173,14 +1055,11 @@ void SchedulerOpen::executeDVFSPolicy() {
 	std::vector<bool> activeCores;
 	for (int coreCounter = 0; coreCounter < numberOfCores; coreCounter++) {
 		oldFrequencies.push_back(Sim()->getMagicServer()->getFrequency(coreCounter));
-	    static bool reserved_cores_are_active = Sim()->getCfg()->getBool("scheduler/open/dvfs/reserved_cores_are_active");
+	    static bool reserved_cores_are_active = Sim()->getCfg()->getBool("scheduler/dvfs/reserved_cores_are_active");
 		activeCores.push_back(reserved_cores_are_active ? isAssignedToTask(coreCounter) : isAssignedToThread(coreCounter));
 	}
-	vector<int> frequencies = dvfsPolicy->getFrequencies(oldFrequencies, activeCores);
-	for (int coreCounter = 0; coreCounter < numberOfCores; coreCounter++) {
-		setFrequency(coreCounter, frequencies.at(coreCounter));
-	}
-	performanceCounters->notifyFreqsOfCores(frequencies);
+
+	m_dvfs->executePolicy(oldFrequencies, activeCores);
 }
 
 
@@ -1206,7 +1085,7 @@ void SchedulerOpen::periodic(SubsecondTime time) {
 		}
 	}
 
-	if ((dvfsPolicy != NULL) && (time.getNS() % dvfsEpoch == 0)) {
+	if ((m_dvfs != NULL) && (time.getNS() % m_dvfs->getEpoch() == 0)) {
 		cout << "\n[Scheduler]: DVFS Control Loop invoked at " << formatTime(time) << endl;
 
 		executeDVFSPolicy();
@@ -1231,8 +1110,8 @@ void SchedulerOpen::periodic(SubsecondTime time) {
 
 		cout << "[Scheduler]: Current mapping:" << endl;
 
-		for (int y = 0; y < coreRows; y++) {
-			for (int x = 0; x < coreColumns; x++) {
+		for (int y = 0; y < m_coreRows; y++) {
+			for (int x = 0; x < m_coreColumns; x++) {
 				if (x > 0) {
 					cout << " ";
 				}
