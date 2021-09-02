@@ -3,6 +3,7 @@
 #include "core_manager.h"
 #include "performance_model.h"
 #include "os_compat.h"
+#include "magic_server.h"
 
 #include <sstream>
 
@@ -216,6 +217,11 @@ void SchedulerPinnedBase::periodic(SubsecondTime time)
    }
 
    m_last_periodic = time;
+
+   if ((m_dvfs != NULL) && (time.getNS() % m_dvfs->getEpoch() == 0)) {
+      std::cout << "\n[Scheduler]: DVFS Control Loop invoked at " << time.getNS() << " ns" << std::endl;
+      executeDVFSPolicy();
+   }
 }
 
 void SchedulerPinnedBase::reschedule(SubsecondTime time, core_id_t core_id, bool is_periodic)
@@ -357,4 +363,18 @@ void SchedulerPinnedBase::printState()
          printf(" %2d", m_core_thread_running[core_id]);
    }
    printf("\n");
+}
+
+
+void SchedulerPinnedBase::executeDVFSPolicy()
+{
+   std::vector<int> oldFrequencies;
+   std::vector<bool> activeCores;
+
+   for (int coreCounter = 0; coreCounter < (m_coreRows * m_coreColumns); coreCounter++) {
+      oldFrequencies.push_back(Sim()->getMagicServer()->getFrequency(coreCounter));
+      activeCores.push_back((m_core_thread_running[coreCounter] == INVALID_THREAD_ID) ? false : true);
+   }
+
+   m_dvfs->executePolicy(oldFrequencies, activeCores);
 }

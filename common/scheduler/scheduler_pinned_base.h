@@ -19,6 +19,7 @@ class SchedulerPinnedBase : public SchedulerDynamic
       virtual void threadStall(thread_id_t thread_id, ThreadManager::stall_type_t reason, SubsecondTime time);
       virtual void threadResume(thread_id_t thread_id, thread_id_t thread_by, SubsecondTime time);
       virtual void threadExit(thread_id_t thread_id, SubsecondTime time);
+      virtual void executeDVFSPolicy();
 
    protected:
       class ThreadInfo
