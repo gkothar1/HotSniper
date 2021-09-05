@@ -802,6 +802,21 @@ def edit_XML(statsobj, stats, cfg):
       l3_cacheSize = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/cache_size', 0, core))
       l3_cacheWriteBackTime = long(sniper_config.get_config_default(cfg, 'perf_model/l3_cache/writeback_time', 0, core))
 
+      # gkothar1
+      itlb_number_entries = long(sniper_config.get_config(cfg, 'perf_model/itlb/size', core))
+      dtlb_number_entries = long(sniper_config.get_config(cfg, 'perf_model/dtlb/size', core))
+      if sniper_config.get_config(cfg, 'perf_model/core/type', core) == "rob":
+        outstanding_stores = long(sniper_config.get_config(cfg, 'perf_model/core/rob_timer/outstanding_stores', core))
+        outstanding_loads = long(sniper_config.get_config(cfg, 'perf_model/core/rob_timer/outstanding_loads', core))
+        commit_width = long(sniper_config.get_config(cfg, 'perf_model/core/rob_timer/commit_width', core))
+        instruction_window_size = long(sniper_config.get_config(cfg, 'perf_model/core/rob_timer/rs_entries', core))
+      else:
+        # default values
+        outstanding_stores = 32
+        outstanding_loads = 48
+        commit_width = issue_width
+        instruction_window_size = 36 # default
+
       if template[i][1]:
            #if template[i][1][1]=="cfg":
           #template[i][0] = template[i][0] % int(calc_param(template[i][1][0],config))
@@ -819,8 +834,21 @@ def edit_XML(statsobj, stats, cfg):
             template[i][0] = template[i][0] % peak_issue_width
           elif template[i][1][0]=="ALU_per_core":
             template[i][0] = template[i][0] % ALU_per_core
+          # gkothar1
+          elif template[i][1][0]=="outstanding_stores":
+            template[i][0] = template[i][0] % outstanding_stores
+          elif template[i][1][0]=="outstanding_loads":
+            template[i][0] = template[i][0] % outstanding_loads
+          elif template[i][1][0]=="commit_width":
+            template[i][0] = template[i][0] % commit_width
           elif template[i][1][0]=="window_size":
             template[i][0] = template[i][0] % window_size
+          elif template[i][1][0]=="instruction_window_size":
+            template[i][0] = template[i][0] % instruction_window_size
+          elif template[i][1][0]=="itlb_number_entries":
+            template[i][0] = template[i][0] % itlb_number_entries
+          elif template[i][1][0]=="dtlb_number_entries":
+            template[i][0] = template[i][0] % dtlb_number_entries
           elif template[i][1][0]=="machineType":
             template[i][0] = template[i][0] % machineType
           elif template[i][1][0]=="L2_clock":
@@ -1182,7 +1210,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node):
     template.append(["\t\t\t<param name=\"peak_issue_width\" value=\"%u\"/>",["peak_issue_width","cfg",iCount]])
     template.append(["\t\t\t<!-- issue_width determins the number of ports of Issue window and other logic ",""])
     template.append(["\t\t\t\tas in the complexity effective proccessors paper; issue_width==dispatch_width -->",""])
-    template.append(["\t\t\t<param name=\"commit_width\" value=\"%u\"/>",["issue_width","cfg",iCount]]) #assuming the issue and commit widths are equal
+    template.append(["\t\t\t<param name=\"commit_width\" value=\"%u\"/>",["commit_width","cfg",iCount]])
     template.append(["\t\t\t<!-- commit_width determins the number of ports of register files -->",""])
     template.append(["\t\t\t<param name=\"fp_issue_width\" value=\"2\"/>",""])
     template.append(["\t\t\t<param name=\"prediction_width\" value=\"1\"/>",""])  #Check whether it can be extracted
@@ -1206,7 +1234,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node):
     template.append(["\t\t\t<param name=\"decoded_stream_buffer_size\" value=\"16\"/>",""])
     template.append(["\t\t\t<param name=\"instruction_window_scheme\" value=\"1\"/><!-- 0 PHYREG based, 1 RSBASED-->",""])
     template.append(["\t\t\t<!-- McPAT support 2 types of OoO cores, RS based and physical reg based-->",""])
-    template.append(["\t\t\t<param name=\"instruction_window_size\" value=\"36\"/>",""])  #
+    template.append(["\t\t\t<param name=\"instruction_window_size\" value=\"%u\"/>" ,["instruction_window_size","cfg",iCount]]) # gkothar1
     template.append(["\t\t\t<param name=\"fp_instruction_window_size\" value=\"0\"/>",""])       #
     template.append(["\t\t\t<!-- the instruction issue Q as in Alpha 21264; The RS as in Intel P6 -->",""])
     template.append(["\t\t\t<param name=\"ROB_size\" value=\"%d\"/>",["window_size","cfg",iCount]])
@@ -1231,9 +1259,9 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node):
     template.append(["\t\t\t<!-- In OoO cores, loads and stores can be issued whether inorder(Pentium Pro) or (OoO)out-of-order(Alpha),",""])
     template.append(["\t\t\tThey will always try to exeute out-of-order though. -->",""])
     template.append(["\t\t\t<param name=\"LSU_order\" value=\"inorder\"/>",""])
-    template.append(["\t\t\t<param name=\"store_buffer_size\" value=\"96\"/>",""])                #
+    template.append(["\t\t\t<param name=\"store_buffer_size\" value=\"%d\"/>" ,["outstanding_stores","cfg",iCount]]) # gkothar1
     template.append(["\t\t\t<!-- By default, in-order cores do not have load buffers -->",""])
-    template.append(["\t\t\t<param name=\"load_buffer_size\" value=\"48\"/>",""])
+    template.append(["\t\t\t<param name=\"load_buffer_size\" value=\"%d\"/>" ,["outstanding_loads","cfg",iCount]]) # gkothar1
     template.append(["\t\t\t<!-- number of ports refer to sustainable concurrent memory accesses -->",""])
     template.append(["\t\t\t<param name=\"memory_ports\" value=\"1\"/>",""])      #Would this be 1 or 2
     template.append(["\t\t\t<!-- max_allowed_in_flight_memo_instructions determins the # of ports of load and store buffer",""])
@@ -1338,7 +1366,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node):
 #-------------------------------------------------------------------------------------------------------------------------
     template.append(["\t\t\t</component>",""])
     template.append(["\t\t\t<component id=\"system.core%i.itlb\" name=\"itlb\">"%iCount,""])
-    template.append(["\t\t\t\t<param name=\"number_entries\" value=\"128\"/>",""])                #not in graphite (whether correct)
+    template.append(["\t\t\t\t<param name=\"number_entries\" value=\"%d\"/>",["itlb_number_entries","cfg",iCount]]) # gkothar1
     template.append(["\t\t\t\t<stat name=\"total_accesses\" value=\"%i\"/>",["itlb.total_accesses","stat",iCount]])
     template.append(["\t\t\t\t<stat name=\"total_misses\" value=\"%i\"/>",["itlb.total_misses","stat",iCount]])
     template.append(["\t\t\t\t<stat name=\"conflicts\" value=\"0\"/>",""])
@@ -1360,7 +1388,7 @@ def readTemplate(ncores, num_l2s, private_l2s, num_l3s, technology_node):
     template.append(["\t\t\t\t<stat name=\"conflicts\" value=\"0\"/>",""] )
     template.append(["\t\t\t</component>",""])
     template.append(["\t\t\t<component id=\"system.core%i.dtlb\" name=\"dtlb\">"%iCount,""])
-    template.append(["\t\t\t\t<param name=\"number_entries\" value=\"256\"/>",""])
+    template.append(["\t\t\t\t<param name=\"number_entries\" value=\"%d\"/>",["dtlb_number_entries","cfg",iCount]]) # gkothar1
     template.append(["\t\t\t\t<stat name=\"total_accesses\" value=\"%i\"/>",["dtlb.total_accesses","stat",iCount]])
     template.append(["\t\t\t\t<stat name=\"total_misses\" value=\"%i\"/>",["dtlb.total_misses","stat",iCount]])
     template.append(["\t\t\t\t<stat name=\"conflicts\" value=\"0\"/>",""])
